@@ -3,7 +3,7 @@ import AgoraRTC from "agora-rtc-sdk-ng";
 
 const APP_ID = "c5423838ad7a449c9e48d90088944c10"; // o'zingning APP_ID
 const TOKEN = null; // App Certificate o'chirilgan bo'lsa null ishlaydi
-const CHANNEL = "test";
+const CHANNEL = "test-channel";
 
 const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
 
