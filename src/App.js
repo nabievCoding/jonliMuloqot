@@ -1,50 +1,150 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import AgoraRTC from "agora-rtc-sdk-ng";
 
-const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+const APP_ID = "c5423838ad7a449c9e48d90088944c10"; // Sizning App ID
+const TOKEN = null; // test uchun null, production uchun token kerak
+const CHANNEL = "test-channel";
 
-export default function App() {
-  const [joined, setJoined] = useState(false);
+const App = () => {
+  const [client, setClient] = useState(null);
   const [localTrack, setLocalTrack] = useState(null);
+  const [remoteUsers, setRemoteUsers] = useState([]);
+  const [joined, setJoined] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
-  const APP_ID = "c5423838ad7a449c9e48d90088944c10"; // agora.io dashboarddan olingan
-  const TOKEN = null; // test uchun null qo'yishingiz mumkin
-  const CHANNEL = "test-channel";
+  useEffect(() => {
+    const rtcClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    setClient(rtcClient);
 
-  const joinChannel = async () => {
-    await client.join(APP_ID, CHANNEL, TOKEN, null);
-
-    const micTrack = await AgoraRTC.createMicrophoneAudioTrack();
-    setLocalTrack(micTrack);
-
-    await client.publish([micTrack]);
-    setJoined(true);
-
-    client.on("user-published", async (user, mediaType) => {
-      await client.subscribe(user, mediaType);
+    rtcClient.on("user-published", async (user, mediaType) => {
+      await rtcClient.subscribe(user, mediaType);
       if (mediaType === "audio") {
-        const remoteTrack = user.audioTrack;
-        remoteTrack.play();
+        user.audioTrack.play();
+        setRemoteUsers((prev) => [...prev, user.uid]);
       }
     });
+
+    rtcClient.on("user-unpublished", (user) => {
+      setRemoteUsers((prev) => prev.filter((uid) => uid !== user.uid));
+    });
+
+    return () => {
+      if (localTrack) localTrack.close();
+      rtcClient.leave();
+    };
+  }, []);
+
+  const joinChannel = async () => {
+    if (!client) return;
+
+    await client.join(APP_ID, CHANNEL, TOKEN, null);
+
+    const track = await AgoraRTC.createMicrophoneAudioTrack();
+    await client.publish([track]);
+    setLocalTrack(track);
+    setJoined(true);
   };
 
   const leaveChannel = async () => {
     if (localTrack) {
+      localTrack.stop();
       localTrack.close();
     }
     await client.leave();
+    setRemoteUsers([]);
     setJoined(false);
   };
 
+  const toggleMute = async () => {
+    if (!localTrack) return;
+    if (isMuted) {
+      await localTrack.setEnabled(true);
+    } else {
+      await localTrack.setEnabled(false);
+    }
+    setIsMuted(!isMuted);
+  };
+
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Agora Voice Chat</h2>
-      {joined ? (
-        <button onClick={leaveChannel}>Leave</button>
+    <div style={styles.container}>
+      <h1 style={styles.title}>🎤 Live Voice Chat (React Web)</h1>
+
+      {!joined ? (
+        <button style={styles.joinButton} onClick={joinChannel}>
+          🚀 Join Channel
+        </button>
       ) : (
-        <button onClick={joinChannel}>Join</button>
+        <div style={styles.chatBox}>
+          <p>✅ Ulandingiz: {CHANNEL}</p>
+          <p>👥 Qatnashchilar soni: {remoteUsers.length + 1}</p>
+
+          <div style={styles.controls}>
+            <button onClick={toggleMute} style={styles.controlButton}>
+              {isMuted ? "🔇 Unmute" : "🎤 Mute"}
+            </button>
+            <button onClick={leaveChannel} style={styles.leaveButton}>
+              ❌ Leave
+            </button>
+          </div>
+
+          <ul>
+            <li>👤 Siz ({isMuted ? "Muted" : "Speaking"})</li>
+            {remoteUsers.map((uid) => (
+              <li key={uid}>👥 User {uid}</li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
-}
+};
+
+const styles = {
+  container: {
+    fontFamily: "Arial",
+    backgroundColor: "#16213a",
+    color: "white",
+    minHeight: "100vh",
+    padding: "20px",
+  },
+  title: { fontSize: "28px", marginBottom: "20px", textAlign: "center" },
+  joinButton: {
+    backgroundColor: "#533483",
+    padding: "15px 25px",
+    border: "none",
+    borderRadius: "10px",
+    color: "white",
+    fontSize: "18px",
+    cursor: "pointer",
+    display: "block",
+    margin: "0 auto",
+  },
+  chatBox: {
+    backgroundColor: "#0f3460",
+    borderRadius: "15px",
+    padding: "20px",
+    maxWidth: "400px",
+    margin: "0 auto",
+  },
+  controls: { display: "flex", gap: "10px", marginTop: "20px" },
+  controlButton: {
+    flex: 1,
+    padding: "10px",
+    borderRadius: "8px",
+    border: "none",
+    backgroundColor: "#533483",
+    color: "white",
+    cursor: "pointer",
+  },
+  leaveButton: {
+    flex: 1,
+    padding: "10px",
+    borderRadius: "8px",
+    border: "none",
+    backgroundColor: "#e74c3c",
+    color: "white",
+    cursor: "pointer",
+  },
+};
+
+export default App;
